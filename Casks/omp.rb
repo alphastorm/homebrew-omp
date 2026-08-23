@@ -1,11 +1,14 @@
 cask "omp" do
   version "18.0.1-eede9df3"
-  sha256 "10bdd13a5ca7d6726b10ed563e916e8c926728eb6e3b83f1e6223770cc035ede"
+  sha256 "e68bb8b39c3f0c99384c67f26363056d35e5903314b950b4a7ec2947d04a058c"
 
   github_token = ENV.fetch("HOMEBREW_GITHUB_API_TOKEN", nil)
-  url "https://github.com/alphastorm/homebrew-omp/releases/download/omp-#{version}/omp-#{version}-darwin-arm64.tar.gz",
-      verified: "github.com/alphastorm/",
-      header:   github_token && "Authorization: Bearer #{github_token}"
+  url "https://api.github.com/repos/alphastorm/homebrew-omp/releases/assets/526482605#omp-#{version}-darwin-arm64.tar.gz",
+      verified: "api.github.com/repos/alphastorm/homebrew-omp/",
+      header:   [
+        "Accept: application/octet-stream",
+        github_token && "Authorization: Bearer #{github_token}",
+      ].compact
   name "Oh My Pi"
   desc "Downstream Oh My Pi coding harness with native Code Mode"
   homepage "https://github.com/alphastorm/omp-monorepo"
