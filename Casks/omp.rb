@@ -1,9 +1,9 @@
 cask "omp" do
-  version "18.0.1-eede9df3"
-  sha256 "e68bb8b39c3f0c99384c67f26363056d35e5903314b950b4a7ec2947d04a058c"
+  version "18.0.3-4892e25b"
+  sha256 "5983dbb8e9a3bf268bb6dd5b7eb6a69276d53ec367936c5d79f184106d0f6e08"
 
   github_token = ENV.fetch("HOMEBREW_GITHUB_API_TOKEN", nil)
-  url "https://api.github.com/repos/alphastorm/homebrew-omp/releases/assets/526482605#omp-#{version}-darwin-arm64.tar.gz",
+  url "https://api.github.com/repos/alphastorm/homebrew-omp/releases/assets/526581298#omp-#{version}-darwin-arm64.tar.gz",
       verified: "api.github.com/repos/alphastorm/homebrew-omp/",
       header:   [
         "Accept: application/octet-stream",
