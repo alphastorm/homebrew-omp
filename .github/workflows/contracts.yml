@@ -1,0 +1,87 @@
+name: Homebrew OMP contracts
+run-name: >-
+  Homebrew OMP contracts / ${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool || 'github-hosted' }} /
+  ${{ github.event_name == 'workflow_dispatch' && inputs.dispatch_id || github.sha }}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      execution_pool:
+        description: Execution pool; fleet is for trusted controller dispatches only
+        required: true
+        default: github-hosted
+        type: choice
+        options:
+          - github-hosted
+          - fleet
+      dispatch_id:
+        description: Controller correlation identifier
+        required: false
+        default: manual
+        type: string
+      routing_label:
+        description: One-time fleet routing label
+        required: false
+        type: string
+      target_sha:
+        description: Exact commit tested by the fleet runner
+        required: false
+        type: string
+      fleet_site:
+        description: Fleet site selected by the controller
+        required: false
+        type: choice
+        options:
+          - nyc-pc
+          - sf-pc
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-omp-contracts-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet' && inputs.dispatch_id || 'automatic' }}
+  cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet') }}
+
+jobs:
+  contracts:
+    name: Homebrew OMP contracts
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet' && startsWith(inputs.routing_label, 'homebrew-omp-linux-x64-') && inputs.target_sha != '' && inputs.routing_label || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps:
+      - name: Validate bounded fleet dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet' }}
+        env:
+          FLEET_SITE: ${{ inputs.fleet_site }}
+          ROUTING_LABEL: ${{ inputs.routing_label }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          fail() {
+            printf 'invalid Homebrew OMP fleet dispatch: %s\n' "$1" >&2
+            exit 2
+          }
+          [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] || fail target_sha
+          [[ "$ROUTING_LABEL" =~ ^homebrew-omp-linux-x64-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]] || fail routing_label
+          case "$FLEET_SITE" in
+            nyc-pc|sf-pc) ;;
+            *) fail fleet_site ;;
+          esac
+
+      - name: Check out exact target
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet' && inputs.target_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact fleet target
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.execution_pool == 'fleet' }}
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Verify cask release asset
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/verify_cask.py
