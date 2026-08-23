@@ -41,8 +41,8 @@ Three independent checks, none of which subsumes the others:
   manifest does not declare. Aggregate archive integrity does not localise
   extraction or staging damage.
 - The launcher re-verifies the whole release against `release.json` on every
-  launch, anchored on its own resolved path rather than on any environment
-  variable.
+  launch. It resolves the release root from `HOME`, so running a copy against a
+  different `HOME` verifies and runs that tree, not the one beside the launcher.
 
 Archives are packed reproducibly, so the published digest can be re-derived from
 the immutable release tree without trusting the upload.
@@ -52,8 +52,11 @@ the immutable release tree without trusting the upload.
 `version` is the digest-qualified build id, for example `18.0.1-eede9df3`, not
 the upstream version alone. Two downstream builds of one upstream tag are
 different artifacts: they get different Caskroom slots and different immutable
-asset URLs, so `brew upgrade` moves between them correctly and no published
-digest is ever overwritten.
+asset URLs, so `brew upgrade` moves between them correctly and two builds never
+collide on one digest. Replacing the asset behind an already-published build id
+is permissible only while nothing has installed it; `18.0.3-4892e25b` was
+replaced once under that rule, to ship the `install-release` guard that keeps a
+release the installed `current` or `previous` pointers still name.
 
 ## Signing
 
