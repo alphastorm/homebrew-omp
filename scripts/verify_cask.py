@@ -83,6 +83,20 @@ def main() -> None:
             "GitHub release asset URL",
         )
     )
+    one_match(r'^\s*verified: "api\.github\.com/repos/alphastorm/homebrew-omp/",$',
+              source, "verified repository")
+    one_match(r'^\s*"Accept: application/octet-stream",$', source, "asset media header")
+    one_match(
+        r'^\s*github_token && "Authorization: Bearer #\{github_token\}",$',
+        source,
+        "conditional asset authorization",
+    )
+    one_match(r'^\s*stage_only true$', source, "stage-only artifact")
+    flight_arguments = re.findall(
+        r'^\s*args:\s+\["--(activate|uninstall)"\],$', source, flags=re.MULTILINE
+    )
+    if flight_arguments != ["activate", "uninstall"]:
+        fail(f"expected activate/uninstall flight arguments, found {flight_arguments}")
 
     api_url = f"https://api.github.com/repos/{REPOSITORY}/releases/assets/{asset_id}"
     headers = {
@@ -98,17 +112,8 @@ def main() -> None:
     expected_digest = f"sha256:{sha256}"
     expected_tag = f"omp-{version}"
     expected_download_suffix = f"/releases/download/omp-{version}/{expected_name}"
-    published_download = str(asset.get("browser_download_url", "")).endswith(
-        expected_download_suffix
-    )
-    if published_download:
-        release = fetch_json(
-            f"https://api.github.com/repos/{REPOSITORY}/releases/tags/{expected_tag}",
-            headers,
-            "GitHub release lookup",
-            dict,
-        )
-    else:
+    release = {}
+    if args.allow_draft:
         releases = fetch_json(
             f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100",
             headers,
@@ -123,6 +128,16 @@ def main() -> None:
             ),
             {},
         )
+    if not release:
+        release = fetch_json(
+            f"https://api.github.com/repos/{REPOSITORY}/releases/tags/{expected_tag}",
+            headers,
+            "GitHub release lookup",
+            dict,
+        )
+    published_download = str(asset.get("browser_download_url", "")).endswith(
+        expected_download_suffix
+    )
     release_assets = release.get("assets")
     release_asset_ids = {
         item.get("id")

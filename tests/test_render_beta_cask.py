@@ -10,7 +10,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from render_beta_cask import transform
 
 
-SOURCE = (ROOT / "Casks" / "omp.rb").read_text(encoding="utf-8")
+SOURCE = (
+    ROOT / "release-sources" / "omp-18.0.5-09615b86.rb"
+).read_text(encoding="utf-8")
 
 
 class RenderBetaCaskTest(unittest.TestCase):

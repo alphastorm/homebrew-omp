@@ -82,7 +82,13 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
 
       - name: Test beta cask rendering
-        run: python3 -m unittest discover -s tests -v
+        run: |
+          python3 -m unittest discover -s tests -v
+          if [[ -f Casks/omp-beta.rb ]]; then
+            python3 scripts/render_beta_cask.py \
+              --input release-sources/omp-18.0.5-09615b86.rb \
+              --output Casks/omp-beta.rb --check
+          fi
 
       - name: Verify cask release assets
         env:
@@ -90,5 +96,9 @@ jobs:
         run: |
           python3 scripts/verify_cask.py
           if [[ -f Casks/omp-beta.rb ]]; then
-            python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta --allow-draft
+            if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+              python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta
+            else
+              echo "draft asset verification is a maintainer-local pre-commit gate"
+            fi
           fi

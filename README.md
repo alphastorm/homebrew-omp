@@ -43,17 +43,21 @@ duplicate or weaken those pins.
 ## Maintainer beta cut
 
 The OMP distribution lane remains the single source of archive, version, URL, and installer logic.
-After it packs and uploads the exact OMP asset, render its ordinary cask to a temporary path, then
-mechanically rebrand only the channel-owned fields:
+After it packs and uploads the exact OMP asset, commit its generated ordinary cask beside the beta
+cask, then mechanically rebrand only the channel-owned fields:
 
 ```sh
 cd "$OMP_REPO/tools/release"
-bun run dist:lane cask --receipt "$RECEIPT" --asset-id "$ASSET_ID" --out /tmp/omp-release.rb
+bun run dist:lane cask --receipt "$RECEIPT" --asset-id "$ASSET_ID" \
+  --out "$HOMEBREW_OMP_REPO/release-sources/omp-18.0.5-09615b86.rb"
 
 cd "$HOMEBREW_OMP_REPO"
 python3 scripts/render_beta_cask.py \
-  --input /tmp/omp-release.rb \
+  --input release-sources/omp-18.0.5-09615b86.rb \
   --output Casks/omp-beta.rb
+python3 scripts/render_beta_cask.py \
+  --input release-sources/omp-18.0.5-09615b86.rb \
+  --output Casks/omp-beta.rb --check
 python3 -m unittest discover -s tests -v
 GITHUB_TOKEN="$(gh auth token)" python3 scripts/verify_cask.py \
   --cask Casks/omp-beta.rb --token omp-beta --allow-draft
