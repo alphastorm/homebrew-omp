@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Verify the OMP cask is bound to the uploaded GitHub release asset."""
+"""Verify an OMP channel cask is bound to the uploaded GitHub release asset."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -12,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 REPOSITORY = "alphastorm/homebrew-omp"
-CASK = Path(__file__).resolve().parents[1] / "Casks" / "omp.rb"
+DEFAULT_CASK = Path(__file__).resolve().parents[1] / "Casks" / "omp.rb"
 VERSION_PATTERN = r"[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]{7,40}"
 SHA256_PATTERN = r"[a-f0-9]{64}"
 
@@ -30,7 +31,27 @@ def one_match(pattern: str, source: str, label: str) -> str:
 
 
 def main() -> None:
-    source = CASK.read_text(encoding="utf-8")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cask", type=Path, default=DEFAULT_CASK)
+    parser.add_argument("--token", choices=("omp", "omp-beta"), default="omp")
+    args = parser.parse_args()
+
+    source = args.cask.read_text(encoding="utf-8")
+    declared_token = one_match(r'^cask "([^"]+)" do$', source, "cask token")
+    if declared_token != args.token:
+        fail(f"expected cask token {args.token!r}, found {declared_token!r}")
+    conflicting_token = "omp-beta" if args.token == "omp" else "omp"
+    one_match(
+        rf'^\s*conflicts_with cask: "{conflicting_token}"$',
+        source,
+        "opposite-channel conflict",
+    )
+    if args.token == "omp-beta":
+        one_match(
+            r'^\s*homepage "https://github\.com/alphastorm/omp-ninfer"$',
+            source,
+            "OMP NInfer homepage",
+        )
     version = one_match(
         rf'^\s*version "({VERSION_PATTERN})"$', source, "pinned version"
     )
@@ -46,19 +67,17 @@ def main() -> None:
         )
     )
 
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        fail("GITHUB_TOKEN is required to inspect the private release asset")
-
     api_url = f"https://api.github.com/repos/{REPOSITORY}/releases/assets/{asset_id}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "homebrew-omp-cask-verifier",
+    }
+    if token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         api_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "homebrew-omp-cask-verifier",
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:

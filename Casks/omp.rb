@@ -16,6 +16,8 @@ cask "omp" do
   depends_on macos: :tahoe
   depends_on arch: :arm64
 
+  conflicts_with cask: "omp-beta"
+
   stage_only true
 
   postflight do

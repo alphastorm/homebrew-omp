@@ -35,8 +35,8 @@ on:
         required: false
         type: choice
         options:
-          - nyc-pc
-          - sf-pc
+          - site-a
+          - site-b
 
 permissions:
   contents: read
@@ -65,7 +65,7 @@ jobs:
           [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] || fail target_sha
           [[ "$ROUTING_LABEL" =~ ^homebrew-omp-linux-x64-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]] || fail routing_label
           case "$FLEET_SITE" in
-            nyc-pc|sf-pc) ;;
+            site-a|site-b) ;;
             *) fail fleet_site ;;
           esac
 
@@ -81,7 +81,14 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
         run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
 
-      - name: Verify cask release asset
+      - name: Test beta cask rendering
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Verify cask release assets
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 scripts/verify_cask.py
+        run: |
+          python3 scripts/verify_cask.py
+          if [[ -f Casks/omp-beta.rb ]]; then
+            python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta
+          fi
