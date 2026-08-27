@@ -90,5 +90,5 @@ jobs:
         run: |
           python3 scripts/verify_cask.py
           if [[ -f Casks/omp-beta.rb ]]; then
-            python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta
+            python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta --allow-draft
           fi

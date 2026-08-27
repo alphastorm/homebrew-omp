@@ -30,10 +30,27 @@ def one_match(pattern: str, source: str, label: str) -> str:
     return matches[0]
 
 
+def fetch_json(url: str, headers: dict[str, str], label: str, expected_type: type):
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            value = json.load(response)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+        fail(f"{label} failed: {error}")
+    if not isinstance(value, expected_type):
+        fail(f"{label} returned the wrong JSON type")
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cask", type=Path, default=DEFAULT_CASK)
     parser.add_argument("--token", choices=("omp", "omp-beta"), default="omp")
+    parser.add_argument(
+        "--allow-draft",
+        action="store_true",
+        help="accept a matching authenticated draft prerelease asset",
+    )
     args = parser.parse_args()
 
     source = args.cask.read_text(encoding="utf-8")
@@ -75,28 +92,55 @@ def main() -> None:
     }
     if token := os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(
-        api_url,
-        headers=headers,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            asset = json.load(response)
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
-        fail(f"GitHub asset lookup failed: {error}")
+    asset = fetch_json(api_url, headers, "GitHub asset lookup", dict)
 
     expected_name = f"omp-{version}-darwin-arm64.tar.gz"
     expected_digest = f"sha256:{sha256}"
+    expected_tag = f"omp-{version}"
     expected_download_suffix = f"/releases/download/omp-{version}/{expected_name}"
+    published_download = str(asset.get("browser_download_url", "")).endswith(
+        expected_download_suffix
+    )
+    if published_download:
+        release = fetch_json(
+            f"https://api.github.com/repos/{REPOSITORY}/releases/tags/{expected_tag}",
+            headers,
+            "GitHub release lookup",
+            dict,
+        )
+    else:
+        releases = fetch_json(
+            f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100",
+            headers,
+            "GitHub draft release lookup",
+            list,
+        )
+        release = next(
+            (
+                item
+                for item in releases
+                if isinstance(item, dict) and item.get("tag_name") == expected_tag
+            ),
+            {},
+        )
+    release_assets = release.get("assets")
+    release_asset_ids = {
+        item.get("id")
+        for item in release_assets
+        if isinstance(item, dict)
+    } if isinstance(release_assets, list) else set()
+    is_draft = release.get("draft") is True
     checks = {
         "asset id": asset.get("id") == asset_id,
         "asset name": asset.get("name") == expected_name,
         "uploaded state": asset.get("state") == "uploaded",
         "non-empty asset": isinstance(asset.get("size"), int) and asset["size"] > 0,
         "asset digest": asset.get("digest") == expected_digest,
-        "release tag": str(asset.get("browser_download_url", "")).endswith(
-            expected_download_suffix
-        ),
+        "release tag": release.get("tag_name") == expected_tag,
+        "release asset membership": asset_id in release_asset_ids,
+        "draft authorization": not is_draft or args.allow_draft,
+        "beta prerelease": args.token != "omp-beta" or release.get("prerelease") is True,
+        "published download tag": is_draft or published_download,
     }
     failed = [label for label, passed in checks.items() if not passed]
     if failed:

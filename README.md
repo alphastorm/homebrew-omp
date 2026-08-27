@@ -55,7 +55,8 @@ python3 scripts/render_beta_cask.py \
   --input /tmp/omp-release.rb \
   --output Casks/omp-beta.rb
 python3 -m unittest discover -s tests -v
-python3 scripts/verify_cask.py --cask Casks/omp-beta.rb --token omp-beta
+GITHUB_TOKEN="$(gh auth token)" python3 scripts/verify_cask.py \
+  --cask Casks/omp-beta.rb --token omp-beta --allow-draft
 ```
 
 Commit that cask on the exact beta release branch. Its 40-character commit is the
