@@ -1,4 +1,4 @@
-cask "omp-beta" do
+cask "omp" do
   version "18.0.9-cross-platform-beta-1"
   sha256 "973ec3a03bd03ba3af662336345d6e2bede841adb664ce7fed54ed12dc2595cf"
 
@@ -9,10 +9,10 @@ cask "omp-beta" do
         "Accept: application/octet-stream",
         github_token && "Authorization: Bearer #{github_token}",
       ].compact
-  name "OMP NInfer Beta"
-  desc "Oh My Pi beta with stateful NInfer Responses integration"
-  homepage "https://github.com/alphastorm/omp-ninfer"
-  conflicts_with cask: "omp"
+  name "Oh My Pi"
+  desc "Downstream Oh My Pi coding harness with native Code Mode"
+  homepage "https://github.com/alphastorm/omp-monorepo"
+  conflicts_with cask: "omp-beta"
 
   depends_on macos: :tahoe
   depends_on arch: :arm64

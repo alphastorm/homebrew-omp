@@ -86,7 +86,7 @@ jobs:
           python3 -m unittest discover -s tests -v
           if [[ -f Casks/omp-beta.rb ]]; then
             python3 scripts/render_beta_cask.py \
-              --input release-sources/omp-18.0.5-09615b86.rb \
+              --input release-sources/omp-18.0.9-cross-platform-beta-1.rb \
               --output Casks/omp-beta.rb --check
           fi
 
