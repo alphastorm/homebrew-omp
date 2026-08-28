@@ -15,7 +15,7 @@ transform = MODULE.transform
 
 
 SOURCE = (
-    ROOT / "release-sources" / "omp-18.0.9-cross-platform-beta-1.rb"
+    ROOT / "release-sources" / "omp-18.0.9-cross-platform-beta-2.rb"
 ).read_text(encoding="utf-8")
 
 
@@ -32,8 +32,10 @@ class RenderBetaCaskTest(unittest.TestCase):
                 line for line in SOURCE.splitlines() if line.startswith(prefix)
             )
             self.assertIn(source_line, rendered)
-        self.assertIn('args:         ["--activate"]', rendered)
-        self.assertIn('args:         ["--uninstall"]', rendered)
+        self.assertIn('system_command "#{staged_path}/install.sh"', rendered)
+        self.assertIn('args:         [staged_path.to_s]', rendered)
+        self.assertIn('release_id=$1', rendered)
+        self.assertIn('com.apple.quarantine', rendered)
         self.assertNotIn('cask "omp" do', rendered)
 
     def test_rejects_drifted_distribution_template(self) -> None:
