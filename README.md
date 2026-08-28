@@ -43,20 +43,18 @@ duplicate or weaken those pins.
 ## Maintainer beta cut
 
 The OMP distribution lane remains the single source of archive, version, URL, and installer logic.
-After it packs and uploads the exact OMP asset, commit its generated ordinary cask beside the beta
-cask, then mechanically rebrand only the channel-owned fields:
+After it packs and uploads the exact OMP asset, commit an ordinary source cask that names the
+archive's actual installer contract, then mechanically rebrand only the channel-owned fields. The
+current hosted-client archive ships `install.sh`; the verifier downloads the release asset and
+checks that entrypoint, its release identity, and its binary hash before accepting the cask:
 
 ```sh
-cd "$OMP_REPO/tools/release"
-bun run dist:lane cask --receipt "$RECEIPT" --asset-id "$ASSET_ID" \
-  --out "$HOMEBREW_OMP_REPO/release-sources/omp-18.0.5-09615b86.rb"
-
 cd "$HOMEBREW_OMP_REPO"
 python3 scripts/render_beta_cask.py \
-  --input release-sources/omp-18.0.5-09615b86.rb \
+  --input release-sources/omp-18.0.9-cross-platform-beta-2.rb \
   --output Casks/omp-beta.rb
 python3 scripts/render_beta_cask.py \
-  --input release-sources/omp-18.0.5-09615b86.rb \
+  --input release-sources/omp-18.0.9-cross-platform-beta-2.rb \
   --output Casks/omp-beta.rb --check
 python3 -m unittest discover -s tests -v
 GITHUB_TOKEN="$(gh auth token)" python3 scripts/verify_cask.py \
@@ -73,15 +71,14 @@ passes; never regenerate or amend the accepted cask.
 ## What it installs
 
 Nothing under the Homebrew prefix. The cask is `stage_only`, and a `postflight`
-runs the shipped `install-release`, which owns the real layout:
+runs the shipped `install.sh`, which owns the current hosted-client layout:
 
 ```
-~/.local/lib/omp-code-mode/
-  releases/<version>-<sha256>/   immutable release tree
-  current -> releases/<...>      active release
-  previous -> releases/<...>     rollback target
-  omp -> current/omp-code-mode
-~/.local/bin/omp -> current/omp-code-mode-launcher
+~/.local/share/omp/
+  releases/<release-id>/omp      immutable client binary
+  current                        active release id
+  previous                       rollback release id
+~/.local/bin/omp                 release-resolving launcher
 ```
 
 `~/.local/bin` must be on `PATH`. Homebrew never links a binary here, because
@@ -92,13 +89,10 @@ runs the shipped `install-release`, which owns the real layout:
 Three independent checks, none of which subsumes the others:
 
 - Homebrew verifies the downloaded archive against the `sha256` this cask pins.
-- `install-release` re-verifies every member's SHA-256 and permission mode from
-  the release's own `release.json` after transport, and refuses any path the
-  manifest does not declare. Aggregate archive integrity does not localise
-  extraction or staging damage.
-- The launcher re-verifies the whole release against `release.json` on every
-  launch. It resolves the release root from `HOME`, so running a copy against a
-  different `HOME` verifies and runs that tree, not the one beside the launcher.
+- `install.sh` re-verifies the client binary against the SHA-256 in
+  `client-release.json` before copying it into the immutable release directory.
+- The launcher resolves `current` from `HOME` on every invocation, so a copy
+  running under a different `HOME` uses that isolated tree.
 
 Archives are packed reproducibly, so the published digest can be re-derived from
 the immutable release tree without trusting the upload.

@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shutil
 import sys
+import tarfile
+import tempfile
 import urllib.error
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NoReturn
 
 REPOSITORY = "alphastorm/homebrew-omp"
@@ -44,6 +48,97 @@ def fetch_json(url: str, headers: dict[str, str], label: str, expected_type: typ
     if not isinstance(value, expected_type):
         fail(f"{label} returned the wrong JSON type")
     return value
+
+
+def installer_contract(source: str) -> tuple[str, str | None]:
+    hosted = source.count('system_command "#{staged_path}/install.sh"')
+    legacy = source.count('system_command "#{staged_path}/install-release"')
+    if hosted == 1 and legacy == 0:
+        release_id = one_match(
+            r'^\s*release_id = "([0-9]+\.[0-9]+\.[0-9]+-hosted-macos-arm64-[a-f0-9]{12})"$',
+            source,
+            "hosted release id",
+        )
+        one_match(
+            r'^\s*args:\s+\[staged_path\.to_s\],$', source, "hosted installer argument"
+        )
+        one_match(
+            r'^\s*args:\s+\["-dr", "com\.apple\.quarantine", staged_path\.to_s\],$',
+            source,
+            "quarantine removal",
+        )
+        if "release_id=$1" not in source or 'rm -rf "$data_root/releases/$release_id"' not in source:
+            fail("hosted cask does not own its bounded uninstall")
+        return "hosted", release_id
+    if legacy == 2 and hosted == 0:
+        flight_arguments = re.findall(
+            r'^\s*args:\s+\["--(activate|uninstall)"\],$', source, flags=re.MULTILINE
+        )
+        if flight_arguments != ["activate", "uninstall"]:
+            fail(f"expected activate/uninstall flight arguments, found {flight_arguments}")
+        return "legacy", None
+    fail(f"expected exactly one installer contract, found hosted={hosted} legacy={legacy}")
+
+
+def verify_archive(path: Path, contract: str, release_id: str | None) -> None:
+    with tarfile.open(path, "r:gz") as archive:
+        regular = [member for member in archive.getmembers() if member.isfile()]
+        if contract == "legacy":
+            names = {str(PurePosixPath(member.name)) for member in regular}
+            missing = {"install-release", "release/release.json"} - names
+            if missing:
+                raise ValueError("legacy archive is missing " + ", ".join(sorted(missing)))
+            return
+        roots = {PurePosixPath(member.name).parts[0] for member in regular if PurePosixPath(member.name).parts}
+        if len(roots) != 1:
+            raise ValueError("archive must contain one release root")
+        root = next(iter(roots))
+        by_relative = {
+            str(PurePosixPath(member.name).relative_to(root)): member for member in regular
+        }
+        missing = {"install.sh", "client-release.json", "omp", "omp-launcher"} - set(by_relative)
+        if missing:
+            raise ValueError("hosted archive is missing " + ", ".join(sorted(missing)))
+        manifest_stream = archive.extractfile(by_relative["client-release.json"])
+        installer_stream = archive.extractfile(by_relative["install.sh"])
+        binary_stream = archive.extractfile(by_relative["omp"])
+        if manifest_stream is None or installer_stream is None or binary_stream is None:
+            raise ValueError("hosted archive member could not be read")
+        manifest = json.load(manifest_stream)
+        if manifest.get("releaseId") != release_id:
+            raise ValueError("hosted archive release id does not match cask")
+        binary = manifest.get("binary")
+        if not isinstance(binary, dict) or binary.get("name") != "omp":
+            raise ValueError("hosted archive binary manifest is invalid")
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: binary_stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+        if digest.hexdigest() != binary.get("sha256"):
+            raise ValueError("hosted archive binary hash does not match its manifest")
+        installer = installer_stream.read().decode("utf-8")
+        if release_id not in installer or str(binary.get("sha256")) not in installer:
+            raise ValueError("hosted installer does not bind the release and binary identities")
+
+
+def verify_remote_archive(
+    api_url: str, headers: dict[str, str], contract: str, release_id: str | None
+) -> None:
+    download_headers = dict(headers)
+    download_headers["Accept"] = "application/octet-stream"
+    request = urllib.request.Request(api_url, headers=download_headers)
+    temporary_path: Path | None = None
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            with tempfile.NamedTemporaryFile(delete=False) as temporary:
+                shutil.copyfileobj(response, temporary, 1024 * 1024)
+                temporary_path = Path(temporary.name)
+        verify_archive(temporary_path, contract, release_id)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
+            tarfile.TarError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(f"release archive contract failed: {error}")
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -112,11 +207,7 @@ def main() -> None:
         "conditional asset authorization",
     )
     one_match(r'^\s*stage_only true$', source, "stage-only artifact")
-    flight_arguments = re.findall(
-        r'^\s*args:\s+\["--(activate|uninstall)"\],$', source, flags=re.MULTILINE
-    )
-    if flight_arguments != ["activate", "uninstall"]:
-        fail(f"expected activate/uninstall flight arguments, found {flight_arguments}")
+    contract, release_id = installer_contract(source)
 
     api_url = f"https://api.github.com/repos/{REPOSITORY}/releases/assets/{asset_id}"
     headers = {
@@ -179,6 +270,8 @@ def main() -> None:
     failed = [label for label, passed in checks.items() if not passed]
     if failed:
         fail(", ".join(failed))
+
+    verify_remote_archive(api_url, headers, contract, release_id)
 
     print(f"verified {expected_name} ({asset['size']} bytes, {expected_digest})")
 
