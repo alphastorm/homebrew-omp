@@ -79,17 +79,30 @@ def main() -> None:
     sha256 = one_match(
         rf'^\s*sha256 "({SHA256_PATTERN})"$', source, "pinned sha256"
     )
-    asset_matches = re.findall(
+    static_asset_matches = re.findall(
         r'^\s*url "https://api\.github\.com/repos/alphastorm/homebrew-omp/'
         r'releases/assets/([0-9]+)#(omp-[0-9]+\.[0-9]+\.[0-9]+-'
         r'(?:darwin|macos)-arm64\.tar\.gz)",$',
         source,
         flags=re.MULTILINE,
     )
-    if len(asset_matches) != 1:
-        fail(f"expected exactly one GitHub release asset URL, found {len(asset_matches)}")
-    asset_id = int(asset_matches[0][0])
-    expected_name = asset_matches[0][1]
+    dynamic_asset_matches = re.findall(
+        r'^\s*url "https://api\.github\.com/repos/alphastorm/homebrew-omp/'
+        r'releases/assets/([0-9]+)#omp-#\{version\}-darwin-arm64\.tar\.gz",$',
+        source,
+        flags=re.MULTILINE,
+    )
+    if len(static_asset_matches) + len(dynamic_asset_matches) != 1:
+        fail(
+            "expected exactly one GitHub release asset URL, found "
+            f"{len(static_asset_matches) + len(dynamic_asset_matches)}"
+        )
+    if static_asset_matches:
+        asset_id = int(static_asset_matches[0][0])
+        expected_name = static_asset_matches[0][1]
+    else:
+        asset_id = int(dynamic_asset_matches[0])
+        expected_name = f"omp-{version}-darwin-arm64.tar.gz"
     one_match(r'^\s*verified: "api\.github\.com/repos/alphastorm/homebrew-omp/",$',
               source, "verified repository")
     one_match(r'^\s*"Accept: application/octet-stream",$', source, "asset media header")
