@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-import sys
+import importlib.util
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-from render_beta_cask import transform
+SPEC = importlib.util.spec_from_file_location(
+    "render_beta_cask", ROOT / "scripts" / "render_beta_cask.py"
+)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+transform = MODULE.transform
 
 
 SOURCE = (
-    ROOT / "release-sources" / "omp-18.0.5-09615b86.rb"
+    ROOT / "release-sources" / "omp-18.0.9-cross-platform-beta-1.rb"
 ).read_text(encoding="utf-8")
 
 
