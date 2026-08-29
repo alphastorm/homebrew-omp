@@ -22,8 +22,8 @@ window fast-forwards the same commit to the tap's `main`; clean-machine acceptan
 the ordinary public tap. The product tag remains withheld until the manifest is `ready`. While the
 manifest is `draft`, there is no supported beta install command.
 
-After `v0.1.0-beta.1` is published, follow its
-[exact early-access setup](https://github.com/alphastorm/omp-ninfer/blob/v0.1.0-beta.1/docs/QUICKSTART.md).
+The current published prerelease is `v0.2.0-beta.1`; follow its
+[exact early-access setup](https://github.com/alphastorm/omp-ninfer/blob/v0.2.0-beta.1/docs/QUICKSTART.md).
 That procedure resolves `homebrew_cask_revision` from the product manifest, compares the current
 `omp-beta.rb` bytes with that commit, disables auto-update for the install transaction, and only
 then installs. A bare `brew install --cask omp-beta` is not the release-integrity procedure.
